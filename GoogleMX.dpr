@@ -344,7 +344,7 @@ var
 
     function findService(dIndex, hIndex, portNumber: Word): Service;
     var
-        tIndex: Word;
+        tIndex: Integer;
     begin
         for tIndex := 0 to Length(Domains[dIndex].hosts[hIndex].Services) - 1 do
             if Domains[dIndex].hosts[hIndex].Services[tIndex].port = portNumber then
