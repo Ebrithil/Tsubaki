@@ -48,7 +48,8 @@ type
 const
     nInputFile =  'nmap_input.txt';
     nOutputFile = 'nmap_output.xml';
-    knownMTA:     array[0..6] of string = ('Exchange', 'Lotus', 'MDaemon', 'Postfix', 'Exim', 'Dovecot', 'hmail');
+    knownMTA:     array[0..6] of string = ('Exchange', 'Lotus', 'MDaemon', 'Postfix', 'Exim', 'Dovecot', 'hMail');
+    fullMTANames: array[0..6] of string = ('Microsoft Exchange Server', 'IBM Lotus Domino', 'MDaemon Mail Server', 'Postfix', 'Exim', 'Dovecot', 'hMailServer');
     ExtraDomains: array[0..9] of string = ('pop', 'pop3', 'imap', 'imap4', 'pops', 'pop3s', 'imaps', 'imap4s', 'mail', 'webmail');
 
 var
@@ -85,7 +86,7 @@ begin
         Readln( iFile, Domains[length(Domains) - 1].name );
     end;
     Write('completato.' + #9);
-    Writeln('[' + IntToStr (length(Domains) ) + ']');
+    Writeln('[' + IntToStr(Length(Domains) ) + ']');
 
     CloseFile(iFile);
 end;
@@ -119,14 +120,14 @@ begin
                 Domains[i].Hosts[Length(Domains[i].Hosts) - 1].DNSname := ExtraDomains[j] + '.' + Domains[i].Name;
             end;
     Write('completato.' + #9);
-    Writeln('[' + IntToStr (length(ExtraDomains) ) + ']');
+    Writeln('[' + IntToStr( Length(Domains) * Length(ExtraDomains) ) + ']');
 
     Write('Ricerca e aggiunta dei record MX associati...' + #9#9);
     DNS := TIdDNSResolver.Create;
     DNS.Host := '8.8.8.8';
     DNS.QueryType := [qtMX];
     mxCount := 0;
-    for i := 0 to length(Domains) - 1 do
+    for i := 0 to Length(Domains) - 1 do
     begin
         DNS.Resolve( Domains[i].name );
         for j := 0 to DNS.QueryResult.Count - 1 do
@@ -161,13 +162,14 @@ var
     j,
     k,
     l:      Integer;
+    hCount: Word;
     skip:   boolean;
     oFile:  TextFile;
     SEInfo: TShellExecuteInfo;
 begin
     AssignFile( oFile, IncludeTrailingPathDelimiter( GetEnvironmentVariable('TEMP') ) + nInputFile);
 
-    Write('Creazione del file intermedio...' + #9#9#9); // TODO: 'intermedio'?!?!?!?!
+    Write('Generazione della lista di host da analizzare...' + #9);
     try
         Rewrite(oFile);
     except
@@ -175,10 +177,8 @@ begin
         Readln;
         Exit;
     end;
-    Writeln('completato.');
 
-    // TODO: Spawna dalle risorse l'eseguibile di nmap
-
+    hCount := 0;
     for i := 0 to Length(Domains) - 1 do
         for j := 0 to Length(Domains[i].hosts) - 1 do
         begin
@@ -198,12 +198,17 @@ begin
                     break;
             end;
 
-
             if not skip then
+            begin
                 Writeln(oFile, Domains[i].hosts[j].DNSname);
+                inc(hCount);
+            end;
         end;
     CloseFile(oFile);
+    Write('completato.' + #9);
+    Writeln('[' + IntToStr( hCount ) + ']');
 
+    Writeln;
     Writeln('Avvio analisi dei servizi disponibili per host...' + #9#9#9);
     FillChar(SEInfo, sizeof(TShellExecuteInfo), 0);
     SEInfo.cbSize := SizeOf(TShellExecuteInfo);
@@ -218,7 +223,8 @@ begin
     end;
     ShellExecuteEx(@SEInfo);
     WaitForSingleObject(SEInfo.hProcess, INFINITE); // TODO: Stabilire un timeout?
-    Writeln('completato.');
+    Writeln;
+    Writeln('Analisi degli host completata.');
 end;
 
 procedure parseXML;
@@ -371,7 +377,7 @@ var
         for i := 0 to Length(knownMTA) -1 do
             if AnsiContainsText(iMTAName, knownMTA[i]) then
             begin
-                Result  := knownMTA[i];
+                Result  := fullMTANames[i];
                 isKnown := True;
                 Break;
             end;
@@ -387,7 +393,7 @@ var
     begin
         // Diminizione di priorità per gli MTA sconosciuti
         for i := 0 to Length(MTANames) - 1 do
-            if stdMTAName( MTANames[i] ) = 'Altro' then
+            if MTANames[i] = 'Altro' then
                 MTACounter[i] := 0;
 
         maxIndex := 0;
@@ -410,10 +416,11 @@ begin
     Rewrite(tfReport);
 
     // Ricerca del Mail Server di dominio per priorità
-    SetLength(MTANames,   0);
-    SetLength(MTACounter, 0);
     for i := 0 to Length(Domains) - 1 do
     begin
+        SetLength(MTANames,   0);
+        SetLength(MTACounter, 0);
+
         for j := 0 to Length(Domains[i].Hosts) - 1 do
         begin
             if (findService(i, j, 110).status = 'open') and
