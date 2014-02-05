@@ -108,25 +108,37 @@ procedure MXLookup;
 
 var
     i, j,
-    mxCount: Word;
+    mxCount: Integer;
     DNS:     TIdDNSResolver;
+    tmpName: String;
 begin
-    Write('Creazione di una lista di record probabili...' + #9#9);
+    Write('Verifica disponibilità degli host e extra...' + #9#9);
+    DNS := TIdDNSResolver.Create;
+    DNS.Host := '8.8.8.8';
+    DNS.QueryType := [qtA];
+
     for i := 0 to Length(Domains) - 1 do
         for j := 0 to Length(ExtraDomains) - 1 do
+        begin
+            try
+                DNS.Resolve(ExtraDomains[j] + '.' + Domains[i].Name);
+            except
+                continue;
+            end;
+
             if not domainExists(i, ExtraDomains[j]) then
             begin
                 SetLength(Domains[i].hosts, Length(Domains[i].hosts) + 1);
                 Domains[i].Hosts[Length(Domains[i].Hosts) - 1].DNSname := ExtraDomains[j] + '.' + Domains[i].Name;
             end;
+        end;
     Write('completato.' + #9);
     Writeln('[' + IntToStr( Length(Domains) * Length(ExtraDomains) ) + ']');
 
     Write('Ricerca e aggiunta dei record MX associati...' + #9#9);
-    DNS := TIdDNSResolver.Create;
-    DNS.Host := '8.8.8.8';
     DNS.QueryType := [qtMX];
     mxCount := 0;
+
     for i := 0 to Length(Domains) - 1 do
     begin
         DNS.Resolve( Domains[i].name );
@@ -161,8 +173,8 @@ var
     i,
     j,
     k,
-    l:      Integer;
-    hCount: Word;
+    l,
+    hCount: Integer;
     skip:   boolean;
     oFile:  TextFile;
     SEInfo: TShellExecuteInfo;
@@ -310,7 +322,7 @@ end;
 procedure buildHTMLReport;
 
 var
-    i, j, k:       Word;
+    i, j, k:       Integer;
     rStream:       TResourceStream;
     sStream:       TStringStream;
     tfReport:      TextFile;
@@ -323,7 +335,7 @@ var
     function split(const strBuf: string; const delimiter: string): tStringList;
     var
         tmpBuf:    string;
-        loopCount: word;
+        loopCount: Integer;
     begin
         result := tStringList.create;
 
