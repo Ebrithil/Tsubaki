@@ -112,7 +112,7 @@ var
     DNS:     TIdDNSResolver;
     tmpName: String;
 begin
-    Write('Verifica disponibilità degli host e extra...' + #9#9);
+    Write('Creazione di una lista di record probabili...' + #9#9);
     DNS := TIdDNSResolver.Create;
     DNS.Host := '8.8.8.8';
     DNS.QueryType := [qtA];
@@ -121,7 +121,7 @@ begin
         for j := 0 to Length(ExtraDomains) - 1 do
         begin
             try
-                DNS.Resolve(ExtraDomains[j] + '.' + Domains[i].Name);
+                DNS.Resolve( ExtraDomains[j] + '.' + Domains[i].Name );
             except
                 continue;
             end;
@@ -141,7 +141,12 @@ begin
 
     for i := 0 to Length(Domains) - 1 do
     begin
-        DNS.Resolve( Domains[i].name );
+        try
+            DNS.Resolve( Domains[i].name );
+        except
+            continue;
+        end;
+
         for j := 0 to DNS.QueryResult.Count - 1 do
             if DNS.QueryResult[j].RecType = qtMX then
             begin
