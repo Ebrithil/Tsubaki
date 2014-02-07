@@ -6,6 +6,7 @@ program GoogleMX;
 {$R Resources.res}
 
 uses
+    Generics.Collections,
     System.Variants,
     System.SysUtils,
     System.StrUtils,
@@ -21,8 +22,7 @@ uses
 type
     ServiceStatus = ( StatusOpen, StatusFiltered, StatusClosed );
 
-    Service = record
-        port:     Word;
+    Service = class
         protocol,
         name,
         status,
@@ -30,7 +30,7 @@ type
     end;
 
     Host = record
-        Services:   Array of Service;
+        Services:   TDictionary<WORD, Service>;
         IP,
         DNSname,
         PTRname,
@@ -252,6 +252,8 @@ var
     CurHost,
     CurPort:    IXMLDOMNode;
     tmpHost:    String;
+    tmpPort:    WORD;
+    tmpServ:    Service;
     i,
     j,
     k,
@@ -286,37 +288,41 @@ begin
 
                     // Selezione dei nodi porta
                     SrvList := CurHost.selectNodes('ports/port');
-                    SetLength(Domains[k].hosts[l].Services, SrvList.length);
+                    Domains[k].Hosts[l].Services := TDictionary<WORD, Service>.Create(SrvList.length);
 
                     // Parsing dei nodi porta
                     for j := 0 to SrvList.length - 1 do
                     begin
                         // Selezione del nodo porta
                         CurPort := SrvList.item[j];
+                        tmpServ := Service.Create;
+
+                        // Recupero del numero
+                        tmpPort := WORD(CurPort.attributes.getNamedItem('portid').nodeValue);
 
                         // Recupero del protocollo
-                        Domains[k].hosts[l].Services[j].protocol :=  VarToStr(CurPort.attributes.getNamedItem('protocol').nodeValue);
-                        // Recupero del numero
-                        Domains[k].hosts[l].Services[j].port     :=  WORD(CurPort.attributes.getNamedItem('portid').nodeValue);
+                        tmpServ.protocol :=  VarToStr(CurPort.attributes.getNamedItem('protocol').nodeValue);
                         // Recupero dello stato
-                        Domains[k].hosts[l].Services[j].status   :=  VarToStr(CurPort.selectSingleNode('state').attributes.getNamedItem('state').nodeValue);
+                        tmpServ.status   :=  VarToStr(CurPort.selectSingleNode('state').attributes.getNamedItem('state').nodeValue);
                         // Recupero del nome
-                        Domains[k].hosts[l].Services[j].name     :=  VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('name').nodeValue);
+                        tmpServ.name     :=  VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('name').nodeValue);
                         // Recupero delle informazioni
-                        Domains[k].hosts[l].Services[j].info     := '?';
+                        tmpServ.info     := '?';
                         if Assigned( CurPort.selectSingleNode('service').attributes.getNamedItem('product') ) then
                         begin
-                            Domains[k].hosts[l].Services[j].info :=  VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('product').nodeValue);
+                            tmpServ.info :=  VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('product').nodeValue);
 
                             if Assigned( CurPort.selectSingleNode('service').attributes.getNamedItem('version') ) then
-                                Domains[k].hosts[l].Services[j].info :=
-                                    Domains[k].hosts[l].Services[j].info + ' v'
+                                tmpServ.info :=
+                                    tmpServ.info + ' v'
                                     + VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('version').nodeValue);
                             if Assigned( CurPort.selectSingleNode('service').attributes.getNamedItem('extrainfo') ) then
-                                Domains[k].hosts[l].Services[j].info :=
-                                    Domains[k].hosts[l].Services[j].info + ' - '
+                                tmpServ.info :=
+                                    tmpServ.info + ' - '
                                     + VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('extrainfo').nodeValue);
                         end;
+
+                        Domains[k].Hosts[l].Services.Add(tmpPort, tmpServ);
                     end;
                 end;
             end;
@@ -336,6 +342,7 @@ var
     htmlChartInfo: String;
     MTANames:      Array of String;
     MTACounter:    Array of Byte;
+    tmpList:       TList<WORD>;
 
     function split(const strBuf: string; const delimiter: string): tStringList;
     var
@@ -357,18 +364,6 @@ var
         until loopCount > length(strBuf);
 
         result.add( trim(tmpBuf) );
-    end;
-
-    function findService(dIndex, hIndex, portNumber: Word): Service;
-    var
-        tIndex: Integer;
-    begin
-        for tIndex := 0 to Length(Domains[dIndex].hosts[hIndex].Services) - 1 do
-            if Domains[dIndex].hosts[hIndex].Services[tIndex].port = portNumber then
-            begin
-                Result := Domains[dIndex].hosts[hIndex].Services[tIndex];
-                Break;
-            end;
     end;
 
     function findMTA(nMTA: string): ShortInt;
@@ -443,10 +438,11 @@ begin
             Domains[i].Hosts[j].MailServer := 'Altro'; // Defaulta ad 'Altro'
 
             for k := 0 to Length(Ports) do
-                if (findService(i, j, k).status = 'open') and
-                   (findService(i, j, k).info <> '?')     then
+                if (Domains[i].Hosts[j].Services.ContainsKey(Ports[k]))     and
+                   (Domains[i].Hosts[j].Services[Ports[k]].status = 'open') and
+                   (Domains[i].Hosts[j].Services[Ports[k]].info <> '?')     then
                 begin
-                    Domains[i].Hosts[j].MailServer := stdMTAName( findService(i, j, k).info );
+                    Domains[i].Hosts[j].MailServer := stdMTAName( Domains[i].Hosts[j].Services[Ports[k]].info );
                     break;
                 end;
 
@@ -531,22 +527,24 @@ begin
                     '</td>' +
                 '</tr>' +
                 sLineBreak;
-            for k := 0 to Length(Domains[i].Hosts[j].Services) - 1 do
+            tmpList := TList<WORD>.Create(Domains[i].Hosts[j].Services.Keys);
+            tmpList.Sort;
+            for k := 0 to tmpList.Count - 1 do
                 htmlHostTable :=
                     htmlHostTable +
                     '<tr>' +
                         '<td class="colspacer"></td>' +
                         '<td class="colspacer"></td>' +
-                        '<td class="' + Domains[i].Hosts[j].Services[k].status[1] + 'port">' +
-                            AnsiUpperCase(Domains[i].Hosts[j].Services[k].protocol) + ': ' +
-                            IntToStr(Domains[i].Hosts[j].Services[k].port) + ' (' +
-                            Domains[i].Hosts[j].Services[k].name + ')' +
+                        '<td class="' + Domains[i].Hosts[j].Services[tmpList[k]].status[1] + 'port">' +
+                            AnsiUpperCase(Domains[i].Hosts[j].Services[tmpList[k]].protocol) + ': ' +
+                            IntToStr(tmpList[k]) + ' (' +
+                            Domains[i].Hosts[j].Services[tmpList[k]].name + ')' +
                         '</td>' +
-                        '<td class="' + Domains[i].Hosts[j].Services[k].status[1] + 'port">' +
-                            'Status: ' + Domains[i].Hosts[j].Services[k].status +
+                        '<td class="' + Domains[i].Hosts[j].Services[tmpList[k]].status[1] + 'port">' +
+                            'Status: ' + Domains[i].Hosts[j].Services[tmpList[k]].status +
                         '</td>' +
-                        '<td class="' + Domains[i].Hosts[j].Services[k].status[1] + 'info">' +
-                            'Info: ' + Domains[i].Hosts[j].Services[k].info +
+                        '<td class="' + Domains[i].Hosts[j].Services[tmpList[k]].status[1] + 'info">' +
+                            'Info: ' + Domains[i].Hosts[j].Services[tmpList[k]].info +
                         '</td>' +
                     '</tr>' +
                     sLineBreak;
