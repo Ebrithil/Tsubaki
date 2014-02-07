@@ -51,6 +51,7 @@ const
     knownMTA:     array[0..6] of string = ('Exchange', 'Lotus', 'MDaemon', 'Postfix', 'Exim', 'Dovecot', 'hMail');
     fullMTANames: array[0..6] of string = ('Microsoft Exchange Server', 'IBM Lotus Domino', 'MDaemon Mail Server', 'Postfix', 'Exim', 'Dovecot', 'hMailServer');
     ExtraDomains: array[0..9] of string = ('pop', 'pop3', 'imap', 'imap4', 'pops', 'pop3s', 'imaps', 'imap4s', 'mail', 'webmail');
+    Ports: array[0..7] of WORD = (110, 143, 995, 993, 25, 465, 80, 443);
 
 var
     Domains: DomainArray;
@@ -110,7 +111,6 @@ var
     i, j,
     mxCount: Integer;
     DNS:     TIdDNSResolver;
-    tmpName: String;
 begin
     Write('Creazione di una lista di record probabili...' + #9#9);
     DNS := TIdDNSResolver.Create;
@@ -440,32 +440,15 @@ begin
 
         for j := 0 to Length(Domains[i].Hosts) - 1 do
         begin
-            if (findService(i, j, 110).status = 'open') and
-               (findService(i, j, 110).info <> '?')     then
-                Domains[i].Hosts[j].MailServer := stdMTAName( findService(i, j, 110).info )
-            else if (findService(i, j, 143).status = 'open') and
-                    (findService(i, j, 143).info <> '?')     then
-                Domains[i].Hosts[j].MailServer := stdMTAName( findService(i, j, 143).info )
-            else if (findService(i, j, 995).status = 'open') and
-                    (findService(i, j, 995).info <> '?')     then
-                Domains[i].Hosts[j].MailServer := stdMTAName( findService(i, j, 995).info )
-            else if (findService(i, j, 993).status = 'open') and
-                    (findService(i, j, 993).info <> '?')     then
-                Domains[i].Hosts[j].MailServer := stdMTAName( findService(i, j, 993).info )
-            else if (findService(i, j, 25).status = 'open') and
-                    (findService(i, j, 25).info <> '?')     then
-                Domains[i].Hosts[j].MailServer := stdMTAName( findService(i, j, 25).info )
-            else if (findService(i, j, 465).status = 'open') and
-                    (findService(i, j, 465).info <> '?')     then
-                Domains[i].Hosts[j].MailServer := stdMTAName( findService(i, j, 465).info )
-            else if (findService(i, j, 80).status = 'open') and
-                    (findService(i, j, 80).info <> '?')     then
-                Domains[i].Hosts[j].MailServer := stdMTAName( findService(i, j, 80).info )
-            else if (findService(i, j, 443).status = 'open') and
-                    (findService(i, j, 443).info <> '?')     then
-                Domains[i].Hosts[j].MailServer := stdMTAName( findService(i, j, 443).info )
-            else
-                Domains[i].Hosts[j].MailServer := 'Altro';
+            Domains[i].Hosts[j].MailServer := 'Altro'; // Defaulta ad 'Altro'
+
+            for k := 0 to Length(Ports) do
+                if (findService(i, j, k).status = 'open') and
+                   (findService(i, j, k).info <> '?')     then
+                begin
+                    Domains[i].Hosts[j].MailServer := stdMTAName( findService(i, j, k).info );
+                    break;
+                end;
 
             if findMTA(Domains[i].Hosts[j].MailServer) = -1 then
             begin
