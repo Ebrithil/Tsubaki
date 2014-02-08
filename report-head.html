@@ -27,7 +27,8 @@
 			
 			td.colspacer
 			{
-				width: 3%;
+				width:      3%;
+				text-align: right;
 			}
 			td.rowspacer
 			{
@@ -39,7 +40,7 @@
 				border: 			1px solid blue;
 				font:				bold 200% tahoma,sans-serif; 
 			}
-			td.server
+			td.host
 			{
 				background-color:	#CCFFFF;
 				border: 			1px solid blue;
@@ -83,6 +84,15 @@
 				background-color:	#FFCCCC;
 				border: 			1px solid red;
 				font:				bold 100% tahoma,sans-serif; 
+			}
+			
+			tr.hName
+			{
+				display: none;
+			}
+			tr.hPort
+			{
+				display: none;
 			}
 		</style>
 		<script type="text/javascript">
@@ -455,7 +465,42 @@
 			e[a],0!==c.labelQuarter||c.hidden||this.checkOverlapping(a,c,0,!0,0);for(a=0;a<g;a++)c=e[a],1!=c.labelQuarter||c.hidden||this.checkOverlapping(a,c,1,!1,0);for(a=g-1;0<=a;a--)c=e[a],2!=c.labelQuarter||c.hidden||this.checkOverlapping(a,c,2,!0,0);for(a=0;a<g;a++)c=e[a],3!=c.labelQuarter||c.hidden||this.checkOverlapping(a,c,3,!1,0)},checkOverlapping:function(e,g,c,a,h){var d,k,b=this.chartData,q=b.length,l=g.label;if(l){if(!0===a)for(k=e+1;k<q;k++)b[k].labelQuarter==c&&(d=this.checkOverlappingReal(g,
 			b[k],c))&&(k=q);else for(k=e-1;0<=k;k--)b[k].labelQuarter==c&&(d=this.checkOverlappingReal(g,b[k],c))&&(k=0);!0===d&&100>h&&(d=g.ty+3*g.iy,g.ty=d,l.translate(g.tx2,d),this.checkOverlapping(e,g,c,a,h+1))}},checkOverlappingReal:function(e,g,c){var a=!1,h=e.label,d=g.label;e.labelQuarter!=c||e.hidden||g.hidden||!d||(h=h.getBBox(),c={},c.width=h.width,c.height=h.height,c.y=e.ty,c.x=e.tx,e=d.getBBox(),d={},d.width=e.width,d.height=e.height,d.y=g.ty,d.x=g.tx,AmCharts.hitTest(c,d)&&(a=!0));return a}});
 		</script>
-        
+        <script type="text/javascript">
+			function showHosts(dNum) {
+				var hosts = document.getElementsByName('dHost_' + dNum);
+				for(var i = 0; i < hosts.length; i++) {
+					if (hosts[i].style.display == 'table-row') { 
+						hosts[i].style.display = 'none';
+					}
+					else {
+						hosts[i].style.display = 'table-row';
+					}
+				}
+				showPorts(dNum, '-1', false);
+			}
+			function showPorts(dNum, pNum, fAction) {
+				if (pNum == '-1') {
+					var ports = [];
+					var tableRows = document.getElementsByTagName('tr');
+					for(var j = 0; j < tableRows.length; j++) {
+						if (tableRows[j].getAttribute('name').indexOf('hPort_' + dNum) == 0) {
+							ports.push(tableRows[j]);
+						}
+					}
+				}
+				else {
+					var ports = document.getElementsByName('hPort_' + dNum + '_' + pNum);
+				}
+				for(var i = 0; i < ports.length; i++) {
+					if (ports[i].style.display == 'none' && fAction) { 
+						ports[i].style.display = 'table-row';
+					}
+					else {
+						ports[i].style.display = 'none';
+					}
+				}
+			}
+		</script>
         <script type="text/javascript">
 			$$ChartInfo$$
         </script>

@@ -48,8 +48,9 @@ type
 const
     nInputFile =  'nmap_input.txt';
     nOutputFile = 'nmap_output.xml';
-    knownMTA:     array[0..6] of string = ('Exchange', 'Lotus', 'MDaemon', 'Postfix', 'Exim', 'Dovecot', 'hMail');
-    fullMTANames: array[0..6] of string = ('Microsoft Exchange Server', 'IBM Lotus Domino', 'MDaemon Mail Server', 'Postfix', 'Exim', 'Dovecot', 'hMailServer');
+    knownMTA:     array[0..8] of string = ('Google', 'Postini', 'Exchange', 'Lotus', 'MDaemon', 'Postfix', 'Exim', 'Dovecot', 'hMail');
+    fullMTANames: array[0..8] of string = ('Google Apps Services', 'Google Postini Services', 'Microsoft Exchange Server',
+                                           'IBM Lotus Domino', 'MDaemon Mail Server', 'Postfix', 'Exim', 'Dovecot', 'hMailServer');
     ExtraDomains: array[0..9] of string = ('pop', 'pop3', 'imap', 'imap4', 'pops', 'pop3s', 'imaps', 'imap4s', 'mail', 'webmail');
     Ports: array[0..7] of WORD = (110, 143, 995, 993, 25, 465, 80, 443);
 
@@ -509,8 +510,8 @@ begin
     begin
         htmlHostTable :=
             htmlHostTable +
-            '<tr>' +
-                '<td colspan="5" class="domain">' +
+            '<tr name="dName_' + IntToStr(i) + '">' +
+                '<td colspan="5" class="domain" ' + 'onClick="javascript:showHosts(''' + IntToStr(i) + ''')"' + '>' +
                     Domains[i].Name + ' (MTA: ' + Domains[i].MailServer + ')' +
                 '</td>' +
             '</tr>' +
@@ -519,9 +520,10 @@ begin
         begin
             htmlHostTable :=
                 htmlHostTable +
-                '<tr>' +
+                '<tr name="' + 'dHost_' + IntToStr(i) + '" class="hName" '
+                             + 'onClick="javascript:showPorts(''' + IntToStr(i)+ ''', ''' + IntToStr(j) + ''', true)"' + '>' +
                     '<td class="colspacer"></td>' +
-                    '<td colspan="4" class="server">' +
+                    '<td colspan="4" class="host">' +
                         Domains[i].Hosts[j].DNSname +
                         ' (IP: ' + Domains[i].Hosts[j].IP + ' - MTA: ' + Domains[i].Hosts[j].MailServer + ')' +
                     '</td>' +
@@ -532,7 +534,7 @@ begin
             for k := 0 to tmpList.Count - 1 do
                 htmlHostTable :=
                     htmlHostTable +
-                    '<tr>' +
+                    '<tr name="' + 'hPort_' + IntToStr(i) + '_' + IntToStr(j) + '" class="hPort">' +
                         '<td class="colspacer"></td>' +
                         '<td class="colspacer"></td>' +
                         '<td class="' + Domains[i].Hosts[j].Services[tmpList[k]].status[1] + 'port">' +
@@ -549,6 +551,8 @@ begin
                     '</tr>' +
                     sLineBreak;
         end;
+        if ( i <> (Length(Domains) - 1) ) then
+            htmlHostTable := htmlHostTable +'<tr name="dSpacer"><td colspan="5" class="rowspacer"></tr>' + sLineBreak;
     end;
     htmlHostTable := htmlHostTable + '</table>' + sLineBreak;
 
@@ -565,6 +569,4 @@ begin
     NMAP;
     parseXML;
     buildHTMLReport;
-
-    Readln;
 end.
