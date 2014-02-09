@@ -3,7 +3,7 @@
 
     <head>
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-        <title>Mail Server Discovery Report</title>
+        <title>Tsubaki Discovery Report</title>
         <style>
 			body {
 				font-family: Tahoma,Arial,Verdana;
@@ -15,7 +15,19 @@
 			a:visited {color:#84c4e2;}
 			a:hover {color: #cd82ad;}
 			a:active {color: #84c4e2;}
-			
+
+			#titlediv
+			{
+				width:				60%;
+				color:				blue;
+				margin:				3% auto 1% auto;
+				padding:			10px;
+				text-align:			center;
+				background-color:	#CCFFCC;
+				border: 			1px solid green;
+				font:				bold 250% calibri,sans-serif;
+			}
+
 			#domains table
 			{
 				border-collapse:	collapse;
@@ -24,7 +36,7 @@
 			{
 				padding:			5px;
 			}
-			
+
 			td.colspacer
 			{
 				width:      3%;
@@ -38,54 +50,54 @@
 			{
 				background-color:	#99CCFF;
 				border: 			1px solid blue;
-				font:				bold 200% tahoma,sans-serif; 
+				font:				bold 200% calibri,sans-serif;
 			}
 			td.host
 			{
 				background-color:	#CCFFFF;
 				border: 			1px solid blue;
-				font:				bold 150% tahoma,sans-serif; 
+				font:				bold 150% calibri,sans-serif;
 			}
 			td.oport
 			{
 				background-color:	#CCFFCC;
 				border: 			1px solid green;
 				width: 				10%;
-				font:				bold 100% tahoma,sans-serif; 
+				font:				bold 100% calibri,sans-serif;
 			}
 			td.fport
 			{
 				background-color:	#FFFFCC;
 				border: 			1px solid orange;
 				width: 				10%;
-				font:				bold 100% tahoma,sans-serif; 
+				font:				bold 100% calibri,sans-serif;
 			}
 			td.cport
 			{
 				background-color:	#FFCCCC;
 				border: 			1px solid red;
 				width: 				10%;
-				font:				bold 100% tahoma,sans-serif; 
+				font:				bold 100% calibri,sans-serif;
 			}
 			td.oinfo
 			{
 				background-color:	#CCFFCC;
 				border: 			1px solid green;
-				font:				bold 100% tahoma,sans-serif; 
+				font:				bold 100% calibri,sans-serif;
 			}
 			td.finfo
 			{
 				background-color:	#FFFFCC;
 				border: 			1px solid orange;
-				font:				bold 100% tahoma,sans-serif; 
+				font:				bold 100% calibri,sans-serif;
 			}
 			td.cinfo
 			{
 				background-color:	#FFCCCC;
 				border: 			1px solid red;
-				font:				bold 100% tahoma,sans-serif; 
+				font:				bold 100% calibri,sans-serif;
 			}
-			
+
 			tr.hName
 			{
 				display: none;
@@ -469,7 +481,7 @@
 			function showHosts(dNum) {
 				var hosts = document.getElementsByName('dHost_' + dNum);
 				for(var i = 0; i < hosts.length; i++) {
-					if (hosts[i].style.display == 'table-row') { 
+					if (hosts[i].style.display == 'table-row') {
 						hosts[i].style.display = 'none';
 					}
 					else {
@@ -492,7 +504,7 @@
 					var ports = document.getElementsByName('hPort_' + dNum + '_' + pNum);
 				}
 				for(var i = 0; i < ports.length; i++) {
-					if (ports[i].style.display == 'none' && fAction) { 
+					if (ports[i].style.display == 'none' && fAction) {
 						ports[i].style.display = 'table-row';
 					}
 					else {
@@ -505,9 +517,10 @@
 			$$ChartInfo$$
         </script>
     </head>
-    
+
     <body>
-        <div id="chartdiv" style="width: 100%; height: 400px;"></div>
+        <div id="titlediv">Tsubaki Discovery Report</div>
+		<div id="chartdiv" style="width: 100%; height: 400px;"></div>
 		$$HostTable$$
     </body>
 
