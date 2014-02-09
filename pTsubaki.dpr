@@ -43,11 +43,10 @@ type
         Hosts:      Array of Host;
     end;
 
-    DomainArray = Array of Domain;
-
 const
     nInputFile =  'nmap_input.txt';
     nOutputFile = 'nmap_output.xml';
+    nReportFile = 'scan_report.html';
     knownMTA:     array[0..8] of string = ('Google', 'Postini', 'Exchange', 'Lotus', 'MDaemon', 'Postfix', 'Exim', 'Dovecot', 'hMail');
     fullMTANames: array[0..8] of string = ('Google Apps Services', 'Google Postini Services', 'Microsoft Exchange Server',
                                            'IBM Lotus Domino', 'MDaemon Mail Server', 'Postfix', 'Exim', 'Dovecot', 'hMailServer');
@@ -55,45 +54,40 @@ const
     Ports: array[0..7] of WORD = (110, 143, 995, 993, 25, 465, 80, 443);
 
 var
-    Domains: DomainArray;
+    iFile,
+    oFile:         TextFile;
 
-procedure LoadDomains;
-var
-    iFile: TextFile;
-begin
-    if not FileExists( 'prova.txt' ) then // TODO: Stabilire il nome del file di input
-    begin
-        Writeln(' Errore, file non trovato. ');
-        Readln;
-        Exit;
-    end;
+    i, j,
+    k, l,
+    hCount,
+    mxCount:       Integer;
 
-    AssignFile( iFile, 'prova.txt' ); // TODO: Stabilire il nome del file di input
+    DNS:           TIdDNSResolver;
+    skip:          Boolean;
+    SEInfo:        TShellExecuteInfo;
 
-    Write('Apertura del file di input...' + #9#9#9#9);
-    try
-        Reset(iFile);
-    except
-        Writeln('errore.');
-        Readln;
-        Exit;
-    end;
-    Writeln('completato.');
+    SrvList,
+    HostList:      IXMLDOMNodeList;
+    CurHost,
+    CurPort:       IXMLDOMNode;
+    ResultXML:     IXMLDOMDocument;
 
-    Write('Caricamento dei domini da analizzare...' + #9#9#9);
-    while not EoF(iFile) do
-    begin
-        SetLength( Domains, length(Domains) + 1 );
-        Domains[length(Domains) - 1].MailServer := '?';
-        Readln( iFile, Domains[length(Domains) - 1].name );
-    end;
-    Write('completato.' + #9);
-    Writeln('[' + IntToStr(Length(Domains) ) + ']');
+    tmpPort:       WORD;
+    tmpServ:       Service;
+    rStream:       TResourceStream;
+    sStream:       TStringStream;
+    tfReport:      TextFile;
 
-    CloseFile(iFile);
-end;
+    tmpList:       TList<Word>;
+    Domains:       Array of Domain;
+    MTANames:      Array of String;
+    MTACounter:    Array of Byte;
 
-procedure MXLookup;
+    tmpHost,
+    tmpReport,
+    htmlHostTable,
+    htmlChartInfo: String;
+
 
     function domainExists(dIndex: Integer; dName: String): Boolean;
     var
@@ -108,60 +102,6 @@ procedure MXLookup;
             end;
     end;
 
-var
-    i, j,
-    mxCount: Integer;
-    DNS:     TIdDNSResolver;
-begin
-    Write('Creazione di una lista di record probabili...' + #9#9);
-    DNS := TIdDNSResolver.Create;
-    DNS.Host := '8.8.8.8';
-    DNS.QueryType := [qtA];
-
-    for i := 0 to Length(Domains) - 1 do
-        for j := 0 to Length(ExtraDomains) - 1 do
-        begin
-            try
-                DNS.Resolve( ExtraDomains[j] + '.' + Domains[i].Name );
-            except
-                continue;
-            end;
-
-            if not domainExists(i, ExtraDomains[j]) then
-            begin
-                SetLength(Domains[i].hosts, Length(Domains[i].hosts) + 1);
-                Domains[i].Hosts[Length(Domains[i].Hosts) - 1].DNSname := ExtraDomains[j] + '.' + Domains[i].Name;
-            end;
-        end;
-    Write('completato.' + #9);
-    Writeln('[' + IntToStr( Length(Domains) * Length(ExtraDomains) ) + ']');
-
-    Write('Ricerca e aggiunta dei record MX associati...' + #9#9);
-    DNS.QueryType := [qtMX];
-    mxCount := 0;
-
-    for i := 0 to Length(Domains) - 1 do
-    begin
-        try
-            DNS.Resolve( Domains[i].name );
-        except
-            continue;
-        end;
-
-        for j := 0 to DNS.QueryResult.Count - 1 do
-            if DNS.QueryResult[j].RecType = qtMX then
-            begin
-                SetLength( Domains[i].hosts, length(Domains[i].hosts) + 1 );
-                Domains[i].hosts[length(Domains[i].hosts) - 1].DNSname := TMXRecord(DNS.QueryResult[j]).ExchangeServer;
-            end;
-        mxCount := mxCount + DNS.QueryResult.Count;
-    end;
-    Write('completato.' + #9);
-    Writeln('[' + IntToStr( mxCount ) + ']');
-end;
-
-procedure NMAP;
-
     function getFileFromPath(fileName: string): string;
     var
         filePartPtr:   pWideChar;
@@ -174,176 +114,6 @@ procedure NMAP;
 
         Trim(Result);
     end;
-
-var
-    i,
-    j,
-    k,
-    l,
-    hCount: Integer;
-    skip:   boolean;
-    oFile:  TextFile;
-    SEInfo: TShellExecuteInfo;
-begin
-    AssignFile( oFile, IncludeTrailingPathDelimiter( GetEnvironmentVariable('TEMP') ) + nInputFile);
-
-    Write('Generazione della lista di host da analizzare...' + #9);
-    try
-        Rewrite(oFile);
-    except
-        Writeln('errore.');
-        Readln;
-        Exit;
-    end;
-
-    hCount := 0;
-    for i := 0 to Length(Domains) - 1 do
-        for j := 0 to Length(Domains[i].hosts) - 1 do
-        begin
-            skip := false;
-
-            for k := 0 to i do
-            begin
-                for l := 0 to Length(Domains[k].hosts) - 1 do
-                    if (Domains[i].hosts[j].DNSname = Domains[k].hosts[l].DNSname) and
-                       (k <> i) and (j <> l) then
-                    begin
-                        skip := true;
-                        break;
-                    end;
-
-                 if skip then
-                    break;
-            end;
-
-            if not skip then
-            begin
-                Writeln(oFile, Domains[i].hosts[j].DNSname);
-                inc(hCount);
-            end;
-        end;
-    CloseFile(oFile);
-    Write('completato.' + #9);
-    Writeln('[' + IntToStr( hCount ) + ']');
-
-    Writeln;
-    Writeln('Avvio analisi dei servizi disponibili per host...' + #9#9#9);
-    FillChar(SEInfo, sizeof(TShellExecuteInfo), 0);
-    SEInfo.cbSize := SizeOf(TShellExecuteInfo);
-    with SEInfo do
-    begin
-        fMask        := SEE_MASK_NOCLOSEPROCESS or SEE_MASK_NO_CONSOLE;
-        Wnd          := 0;
-        lpFile       := PChar( getFileFromPath('nmap.exe') );
-        lpParameters := PChar('-sT -sV -p T:25,80,110,143,443,465,993,995 -Pn'
-                        + ' -iL ' + IncludeTrailingPathDelimiter( GetEnvironmentVariable('TEMP') ) + nInputFile
-                        + ' -oX ' + IncludeTrailingPathDelimiter( GetEnvironmentVariable('TEMP') ) + nOutputFile) ;
-    end;
-    ShellExecuteEx(@SEInfo);
-    WaitForSingleObject(SEInfo.hProcess, INFINITE); // TODO: Stabilire un timeout?
-    Writeln;
-    Writeln('Analisi degli host completata.');
-end;
-
-procedure parseXML;
-var
-    ResultXML:  IXMLDOMDocument;
-    HostList,
-    SrvList:    IXMLDOMNodeList;
-    CurHost,
-    CurPort:    IXMLDOMNode;
-    tmpHost:    String;
-    tmpPort:    WORD;
-    tmpServ:    Service;
-    i,
-    j,
-    k,
-    l:          Integer;
-begin
-    CoInitialize(nil);
-    ResultXML := CoDOMDocument.Create;
-
-    // Caricamento dell'XML in memoria
-    ResultXML.load( IncludeTrailingPathDelimiter( GetEnvironmentVariable('TEMP') ) + nOutputFile );
-
-    // Selezione dei nodi host
-    HostList := ResultXML.selectNodes('nmaprun/host');
-
-    // Parsing dei nodi host
-    for i := 0 to HostList.length - 1 do
-    begin
-        for k := 0 to Length(Domains) - 1 do
-        begin
-            // Selezione del nodo host
-            CurHost := HostList.item[i];
-
-            // Recupero del nome
-            tmpHost := VarToStr(CurHost.selectSingleNode('hostnames').selectSingleNode('hostname').attributes.getNamedItem('name').nodeValue);
-
-            for l := 0 to Length(Domains[k].hosts) - 1 do
-            begin
-                if tmpHost = Domains[k].hosts[l].DNSname then
-                begin
-                    // Recupero dell'indirizzo IP
-                    Domains[k].hosts[l].IP := VarToStr(CurHost.selectSingleNode('address').attributes.getNamedItem('addr').nodeValue);
-
-                    // Selezione dei nodi porta
-                    SrvList := CurHost.selectNodes('ports/port');
-                    Domains[k].Hosts[l].Services := TDictionary<WORD, Service>.Create(SrvList.length);
-
-                    // Parsing dei nodi porta
-                    for j := 0 to SrvList.length - 1 do
-                    begin
-                        // Selezione del nodo porta
-                        CurPort := SrvList.item[j];
-                        tmpServ := Service.Create;
-
-                        // Recupero del numero
-                        tmpPort := WORD(CurPort.attributes.getNamedItem('portid').nodeValue);
-
-                        // Recupero del protocollo
-                        tmpServ.protocol :=  VarToStr(CurPort.attributes.getNamedItem('protocol').nodeValue);
-                        // Recupero dello stato
-                        tmpServ.status   :=  VarToStr(CurPort.selectSingleNode('state').attributes.getNamedItem('state').nodeValue);
-                        // Recupero del nome
-                        tmpServ.name     :=  VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('name').nodeValue);
-                        // Recupero delle informazioni
-                        tmpServ.info     := '?';
-                        if Assigned( CurPort.selectSingleNode('service').attributes.getNamedItem('product') ) then
-                        begin
-                            tmpServ.info :=  VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('product').nodeValue);
-
-                            if Assigned( CurPort.selectSingleNode('service').attributes.getNamedItem('version') ) then
-                                tmpServ.info :=
-                                    tmpServ.info + ' v'
-                                    + VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('version').nodeValue);
-                            if Assigned( CurPort.selectSingleNode('service').attributes.getNamedItem('extrainfo') ) then
-                                tmpServ.info :=
-                                    tmpServ.info + ' - '
-                                    + VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('extrainfo').nodeValue);
-                        end;
-
-                        Domains[k].Hosts[l].Services.Add(tmpPort, tmpServ);
-                    end;
-                end;
-            end;
-        end;
-    end;
-end;
-
-procedure buildHTMLReport;
-
-var
-    i, j, k:       Integer;
-    rStream:       TResourceStream;
-    sStream:       TStringStream;
-    tfReport:      TextFile;
-    tmpReport,
-    htmlHostTable,
-    htmlChartInfo: String;
-    MTANames:      Array of String;
-    MTACounter:    Array of Byte;
-    tmpList:       TList<WORD>;
 
     function split(const strBuf: string; const delimiter: string): tStringList;
     var
@@ -418,6 +188,243 @@ var
     end;
 
 begin
+    Writeln('------------------------------------');
+    Writeln(' _____           _           _    _');
+    Writeln('/__   \___ _   _| |__   __ _| | _(_)');
+    Writeln('  / /\/ __| | | | ''_ \ / _` | |/ / |');
+    Writeln(' / /  \__ \ |_| | |_) | (_| |   <| |');
+    Writeln(' \/   |___/\__,_|_.__/ \__,_|_|\_\_|');
+    Writeln('------------------------------------');
+    Writeln;
+
+    // Caricamento della lista di domini da analizzare
+    // -------------------------------------------------------------------------
+    if not FileExists( ParamStr(1) ) then
+    begin
+        Writeln('Errore: impossibile trovare il file.');
+        Readln;
+        Exit;
+    end;
+
+    AssignFile( iFile, ParamStr(1) );
+
+    Write('Apertura del file di input...' + #9#9#9#9);
+    try
+        Reset(iFile);
+    except
+        Writeln('errore.');
+        Readln;
+        Exit;
+    end;
+    Writeln('completata.');
+
+    Write('Caricamento dei domini da analizzare...' + #9#9#9);
+    while not EoF(iFile) do
+    begin
+        SetLength( Domains, length(Domains) + 1 );
+        Domains[length(Domains) - 1].MailServer := '?';
+        Readln( iFile, Domains[length(Domains) - 1].name );
+    end;
+    Write('completato.' + #9);
+    Writeln('[' + IntToStr(Length(Domains) ) + ']');
+
+    CloseFile(iFile);
+    // -------------------------------------------------------------------------
+
+    // Analisi dei domini caricati
+    // -------------------------------------------------------------------------
+    Write('Creazione di una lista di record probabili...' + #9#9);
+    DNS := TIdDNSResolver.Create;
+    DNS.Host := '8.8.8.8';
+    DNS.QueryType := [qtA];
+
+    for i := 0 to Length(Domains) - 1 do
+        for j := 0 to Length(ExtraDomains) - 1 do
+        begin
+            try
+                DNS.Resolve( ExtraDomains[j] + '.' + Domains[i].Name );
+            except
+                continue;
+            end;
+
+            if not domainExists(i, ExtraDomains[j]) then
+            begin
+                SetLength(Domains[i].hosts, Length(Domains[i].hosts) + 1);
+                Domains[i].Hosts[Length(Domains[i].Hosts) - 1].DNSname := ExtraDomains[j] + '.' + Domains[i].Name;
+            end;
+        end;
+    Write('completata.' + #9);
+    Writeln('[' + IntToStr( Length(Domains) * Length(ExtraDomains) ) + ']');
+
+    Write('Ricerca e aggiunta dei record MX associati...' + #9#9);
+    DNS.QueryType := [qtMX];
+    mxCount := 0;
+
+    for i := 0 to Length(Domains) - 1 do
+    begin
+        try
+            DNS.Resolve( Domains[i].name );
+        except
+            continue;
+        end;
+
+        for j := 0 to DNS.QueryResult.Count - 1 do
+            if DNS.QueryResult[j].RecType = qtMX then
+            begin
+                inc(mxCount);
+                SetLength( Domains[i].hosts, length(Domains[i].hosts) + 1 );
+                Domains[i].hosts[length(Domains[i].hosts) - 1].DNSname := TMXRecord(DNS.QueryResult[j]).ExchangeServer;
+            end;
+    end;
+    Write('completata.' + #9);
+    Writeln('[' + IntToStr( mxCount ) + ']');
+    // -------------------------------------------------------------------------
+
+    // Analisi degli host ricavati tramite nmap
+    // -------------------------------------------------------------------------
+    Write('Generazione della lista di host da analizzare...' + #9);
+
+    AssignFile( oFile, IncludeTrailingPathDelimiter( GetEnvironmentVariable('TEMP') ) + nInputFile);
+    try
+        Rewrite(oFile);
+    except
+        Writeln('errore.');
+        Readln;
+        Exit;
+    end;
+
+    hCount := 0;
+    for i := 0 to Length(Domains) - 1 do
+        for j := 0 to Length(Domains[i].hosts) - 1 do
+        begin
+            skip := false;
+
+            for k := 0 to i do
+            begin
+                for l := 0 to Length(Domains[k].hosts) - 1 do
+                    if (Domains[i].hosts[j].DNSname = Domains[k].hosts[l].DNSname) and
+                       (k <> i) and (j <> l) then
+                    begin
+                        skip := true;
+                        break;
+                    end;
+
+                 if skip then
+                    break;
+            end;
+
+            if not skip then
+            begin
+                Writeln(oFile, Domains[i].hosts[j].DNSname);
+                inc(hCount);
+            end;
+        end;
+    CloseFile(oFile);
+    Write('completata.' + #9);
+    Writeln('[' + IntToStr( hCount ) + ']');
+
+    Writeln;
+    Writeln('Avvio analisi dei servizi disponibili per host...');
+    Writeln('-------------------------------------------------------------------');
+    FillChar(SEInfo, SizeOf(TShellExecuteInfo), 0);
+    SEInfo.cbSize := SizeOf(TShellExecuteInfo);
+    with SEInfo do
+    begin
+        fMask        := SEE_MASK_NOCLOSEPROCESS or SEE_MASK_NO_CONSOLE;
+        Wnd          := 0;
+        lpFile       := PChar( getFileFromPath('nmap.exe') );
+        lpParameters := PChar('-sT -sV -p T:25,80,110,143,443,465,993,995 -Pn'
+                        + ' -iL ' + IncludeTrailingPathDelimiter( GetEnvironmentVariable('TEMP') ) + nInputFile
+                        + ' -oX ' + IncludeTrailingPathDelimiter( GetEnvironmentVariable('TEMP') ) + nOutputFile) ;
+    end;
+    ShellExecuteEx(@SEInfo);
+    WaitForSingleObject(SEInfo.hProcess, INFINITE); // TODO: Stabilire un timeout?
+    Writeln;
+    Writeln('Analisi degli host completata.');
+    Writeln('-------------------------------------------------------------------');
+    // -------------------------------------------------------------------------
+
+    // Analisi del risultato della scansione
+    // -------------------------------------------------------------------------
+    Writeln;
+    Write('Analisi dei risultati...' + #9#9#9#9);
+
+    CoInitialize(nil);
+    ResultXML := CoDOMDocument.Create;
+
+    // Caricamento dell'XML in memoria
+    ResultXML.load( IncludeTrailingPathDelimiter( GetEnvironmentVariable('TEMP') ) + nOutputFile );
+
+    // Selezione dei nodi host
+    HostList := ResultXML.selectNodes('nmaprun/host');
+
+    // Parsing dei nodi host
+    for i := 0 to HostList.length - 1 do
+    begin
+        for k := 0 to Length(Domains) - 1 do
+        begin
+            // Selezione del nodo host
+            CurHost := HostList.item[i];
+
+            // Recupero del nome
+            tmpHost := VarToStr(CurHost.selectSingleNode('hostnames').selectSingleNode('hostname').attributes.getNamedItem('name').nodeValue);
+
+            for l := 0 to Length(Domains[k].hosts) - 1 do
+            begin
+                if tmpHost = Domains[k].hosts[l].DNSname then
+                begin
+                    // Recupero dell'indirizzo IP
+                    Domains[k].hosts[l].IP := VarToStr(CurHost.selectSingleNode('address').attributes.getNamedItem('addr').nodeValue);
+
+                    // Selezione dei nodi porta
+                    SrvList := CurHost.selectNodes('ports/port');
+                    Domains[k].Hosts[l].Services := TDictionary<WORD, Service>.Create(SrvList.length);
+
+                    // Parsing dei nodi porta
+                    for j := 0 to SrvList.length - 1 do
+                    begin
+                        // Selezione del nodo porta
+                        CurPort := SrvList.item[j];
+                        tmpServ := Service.Create;
+
+                        // Recupero del numero
+                        tmpPort := WORD(CurPort.attributes.getNamedItem('portid').nodeValue);
+
+                        // Recupero del protocollo
+                        tmpServ.protocol :=  VarToStr(CurPort.attributes.getNamedItem('protocol').nodeValue);
+                        // Recupero dello stato
+                        tmpServ.status   :=  VarToStr(CurPort.selectSingleNode('state').attributes.getNamedItem('state').nodeValue);
+                        // Recupero del nome
+                        tmpServ.name     :=  VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('name').nodeValue);
+                        // Recupero delle informazioni
+                        tmpServ.info     := '?';
+                        if Assigned( CurPort.selectSingleNode('service').attributes.getNamedItem('product') ) then
+                        begin
+                            tmpServ.info :=  VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('product').nodeValue);
+
+                            if Assigned( CurPort.selectSingleNode('service').attributes.getNamedItem('version') ) then
+                                tmpServ.info :=
+                                    tmpServ.info + ' v'
+                                    + VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('version').nodeValue);
+                            if Assigned( CurPort.selectSingleNode('service').attributes.getNamedItem('extrainfo') ) then
+                                tmpServ.info :=
+                                    tmpServ.info + ' - '
+                                    + VarToStr(CurPort.selectSingleNode('service').attributes.getNamedItem('extrainfo').nodeValue);
+                        end;
+
+                        Domains[k].Hosts[l].Services.Add(tmpPort, tmpServ);
+                    end;
+                end;
+            end;
+        end;
+    end;
+    Writeln('completata.' + #9);
+    // -------------------------------------------------------------------------
+
+    // Produzione del report finale
+    // -------------------------------------------------------------------------
+    Write('Generazione del report...' + #9#9#9#9);
+
     // Estrazione del report di base dalla memoria
     rStream := TResourceStream.Create(hInstance, 'resHTMLHead', RT_RCDATA);
     sStream := TStringStream.Create;
@@ -425,7 +432,7 @@ begin
     tmpReport := sStream.DataString;
 
     // Creazione del file di output
-    AssignFile(tfReport, 'report.html');
+    AssignFile(tfReport, nReportFile);
     Rewrite(tfReport);
 
     // Ricerca del Mail Server di dominio per priorità
@@ -561,25 +568,13 @@ begin
     Write(tfReport, tmpReport);
 
     CloseFile(tfReport);
-end;
+    Writeln('completata.' + #9);
 
-begin
-    Writeln('-------------------------------------------------');
-    Writeln(' _____           _           _    _');
-    Writeln('/__   \___ _   _| |__   __ _| | _(_)');
-    Writeln('  / /\/ __| | | | ''_ \ / _` | |/ / |');
-    Writeln(' / /  \__ \ |_| | |_) | (_| |   <| |');
-    Writeln(' \/   |___/\__,_|_.__/ \__,_|_|\_\_|');
-    Writeln('-------------------------------------------------');
-    Writeln;
-
-    LoadDomains;
-    MXLookup;
-    NMAP;
-    parseXML;
-    buildHTMLReport;
+    // Apertura del report a video
+    ShellExecute(0, 'open', nReportFile, nil, nil, SW_SHOWNORMAL);
+    // -------------------------------------------------------------------------
 
     Writeln;
-    Writeln('Report generato, premere un tasto qualunque per terminare.');
+    Writeln('Esecuzione completata, premere invio terminare.');
     Readln;
 end.
