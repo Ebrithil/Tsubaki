@@ -1,9 +1,9 @@
-program GoogleMX;
+program pTsubaki;
 
 {$APPTYPE CONSOLE}
 
 {$R *.res}
-{$R Resources.res}
+{$R resources.res}
 
 uses
     Generics.Collections,
@@ -564,9 +564,22 @@ begin
 end;
 
 begin
+    Writeln('-------------------------------------------------');
+    Writeln(' _____           _           _    _');
+    Writeln('/__   \___ _   _| |__   __ _| | _(_)');
+    Writeln('  / /\/ __| | | | ''_ \ / _` | |/ / |');
+    Writeln(' / /  \__ \ |_| | |_) | (_| |   <| |');
+    Writeln(' \/   |___/\__,_|_.__/ \__,_|_|\_\_|');
+    Writeln('-------------------------------------------------');
+    Writeln;
+
     LoadDomains;
     MXLookup;
     NMAP;
     parseXML;
     buildHTMLReport;
+
+    Writeln;
+    Writeln('Report generato, premere un tasto qualunque per terminare.');
+    Readln;
 end.

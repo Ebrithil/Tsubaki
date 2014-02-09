@@ -3,7 +3,7 @@
         <ProjectGuid>{BE324DA9-9F5A-48A1-ABD9-DC902B5B9C32}</ProjectGuid>
         <ProjectVersion>15.1</ProjectVersion>
         <FrameworkType>None</FrameworkType>
-        <MainSource>GoogleMX.dpr</MainSource>
+        <MainSource>pTsubaki.dpr</MainSource>
         <Base>True</Base>
         <Config Condition="'$(Config)'==''">Debug</Config>
         <Platform Condition="'$(Platform)'==''">Win32</Platform>
@@ -158,7 +158,7 @@
                     <VersionInfoKeys Name="theme"/>
                 </VersionInfoKeys>
                 <Source>
-                    <Source Name="MainSource">GoogleMX.dpr</Source>
+                    <Source Name="MainSource">pTsubaki.dpr</Source>
                 </Source>
             </Delphi.Personality>
             <Deployment/>
