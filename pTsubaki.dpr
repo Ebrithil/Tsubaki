@@ -30,7 +30,7 @@ type
     end;
 
     Host = record
-        Services:   TDictionary<WORD, Service>;
+        Services:   TDictionary<Word, Service>;
         IP,
         DNSname,
         PTRname,
@@ -47,11 +47,11 @@ const
     nInputFile =  'nmap_input.txt';
     nOutputFile = 'nmap_output.xml';
     nReportFile = 'scan_report.html';
+    Ports:        array[0..7] of Word   = (110, 143, 995, 993, 25, 465, 80, 443);
     knownMTA:     array[0..8] of string = ('Google', 'Postini', 'Exchange', 'Lotus', 'MDaemon', 'Postfix', 'Exim', 'Dovecot', 'hMail');
     fullMTANames: array[0..8] of string = ('Google Apps Services', 'Google Postini Services', 'Microsoft Exchange Server',
                                            'IBM Lotus Domino', 'MDaemon Mail Server', 'Postfix', 'Exim', 'Dovecot', 'hMailServer');
     ExtraDomains: array[0..9] of string = ('pop', 'pop3', 'imap', 'imap4', 'pops', 'pop3s', 'imaps', 'imap4s', 'mail', 'webmail');
-    Ports: array[0..7] of WORD = (110, 143, 995, 993, 25, 465, 80, 443);
 
 var
     iFile,
@@ -84,9 +84,12 @@ var
     MTACounter:    Array of Byte;
 
     tmpHost,
+    tmpDomain,
     tmpReport,
     htmlHostTable,
     htmlChartInfo: String;
+
+    domainIsValid: Boolean;
 
 
     function domainExists(dIndex: Integer; dName: String): Boolean;
@@ -219,11 +222,34 @@ begin
     Writeln('completata.');
 
     Write('Caricamento dei domini da analizzare...' + #9#9#9);
+    DNS := TIdDNSResolver.Create;
+    DNS.QueryType := [qtMX];
+    DNS.Host := '8.8.8.8';
+
     while not EoF(iFile) do
     begin
+        Readln( iFile, tmpDomain );
+
+        try
+            domainIsValid := false;
+            DNS.Resolve( tmpDomain );
+            for i := 0 to DNS.QueryResult.Count - 1 do
+                if DNS.QueryResult[i].RecType = qtMX then
+                begin
+                    domainIsValid := true;
+                    Break;
+                end;
+            if not domainIsValid then
+                raise Exception.Create('No A record found for domain ' + tmpDomain);
+        except
+            Writeln;
+            Write('Attenzione: ' + tmpDomain + ' non sembra essere valido...' + #9);
+            Continue;
+        end;
+
         SetLength( Domains, length(Domains) + 1 );
         Domains[length(Domains) - 1].MailServer := '?';
-        Readln( iFile, Domains[length(Domains) - 1].name );
+        Domains[length(Domains) - 1].Name := tmpDomain;
     end;
     Write('completato.' + #9);
     Writeln('[' + IntToStr(Length(Domains) ) + ']');
@@ -234,9 +260,6 @@ begin
     // Analisi dei domini caricati
     // -------------------------------------------------------------------------
     Write('Creazione di una lista di record probabili...' + #9#9);
-    DNS := TIdDNSResolver.Create;
-    DNS.Host := '8.8.8.8';
-    DNS.QueryType := [qtA];
 
     for i := 0 to Length(Domains) - 1 do
         for j := 0 to Length(ExtraDomains) - 1 do
@@ -253,6 +276,7 @@ begin
                 Domains[i].Hosts[Length(Domains[i].Hosts) - 1].DNSname := ExtraDomains[j] + '.' + Domains[i].Name;
             end;
         end;
+
     Write('completata.' + #9);
     Writeln('[' + IntToStr( Length(Domains) * Length(ExtraDomains) ) + ']');
 
@@ -274,6 +298,24 @@ begin
                 inc(mxCount);
                 SetLength( Domains[i].hosts, length(Domains[i].hosts) + 1 );
                 Domains[i].hosts[length(Domains[i].hosts) - 1].DNSname := TMXRecord(DNS.QueryResult[j]).ExchangeServer;
+
+                if AnsiContainsText(
+                            Domains[i].hosts[length(Domains[i].hosts) - 1].DNSname,
+                            'google.com' ) or
+                   AnsiContainsText(
+                            Domains[i].hosts[length(Domains[i].hosts) - 1].DNSname,
+                            'googlemail.com' ) then
+                begin
+                    Domains[i].MailServer := 'Google Apps Services';
+                    Break;
+                end
+                else if AnsiContainsText(
+                            Domains[i].hosts[length(Domains[i].hosts) - 1].DNSname,
+                            'outlook.com' ) then
+                begin
+                    Domains[i].MailServer := 'Microsoft Exchange Online';
+                    Break;
+                end;
             end;
     end;
     Write('completata.' + #9);
@@ -353,7 +395,17 @@ begin
     ResultXML := CoDOMDocument.Create;
 
     // Caricamento dell'XML in memoria
+    ResultXML.async := false;
+    ResultXML.validateOnParse := false;
     ResultXML.load( IncludeTrailingPathDelimiter( GetEnvironmentVariable('TEMP') ) + nOutputFile );
+    if ResultXML.parseError.errorCode <> 0 then
+    begin
+        Writeln('errore.' + #9);
+        Writeln;
+        Writeln('Problema: ' + ResultXML.parseError.reason);
+        Readln;
+        Exit;
+    end;
 
     // Selezione dei nodi host
     HostList := ResultXML.selectNodes('nmaprun/host');
@@ -378,7 +430,7 @@ begin
 
                     // Selezione dei nodi porta
                     SrvList := CurHost.selectNodes('ports/port');
-                    Domains[k].Hosts[l].Services := TDictionary<WORD, Service>.Create(SrvList.length);
+                    Domains[k].Hosts[l].Services := TDictionary<WORD, Service>.Create;
 
                     // Parsing dei nodi porta
                     for j := 0 to SrvList.length - 1 do
@@ -388,7 +440,7 @@ begin
                         tmpServ := Service.Create;
 
                         // Recupero del numero
-                        tmpPort := WORD(CurPort.attributes.getNamedItem('portid').nodeValue);
+                        tmpPort := Word(CurPort.attributes.getNamedItem('portid').nodeValue);
 
                         // Recupero del protocollo
                         tmpServ.protocol :=  VarToStr(CurPort.attributes.getNamedItem('protocol').nodeValue);
@@ -443,9 +495,9 @@ begin
 
         for j := 0 to Length(Domains[i].Hosts) - 1 do
         begin
-            Domains[i].Hosts[j].MailServer := 'Altro'; // Defaulta ad 'Altro'
+            Domains[i].Hosts[j].MailServer := 'Altro'; // Default ad 'Altro'
 
-            for k := 0 to Length(Ports) do
+            for k := 0 to Length(Ports) - 1 do
                 if (Domains[i].Hosts[j].Services.ContainsKey(Ports[k]))     and
                    (Domains[i].Hosts[j].Services[Ports[k]].status = 'open') and
                    (Domains[i].Hosts[j].Services[Ports[k]].info <> '?')     then
@@ -465,7 +517,8 @@ begin
             else
                 inc( MTACounter[findMTA(Domains[i].Hosts[j].MailServer)] );
         end;
-        Domains[i].MailServer := knownMostUsedMTA;
+        if Domains[i].MailServer = '?' then
+            Domains[i].MailServer := knownMostUsedMTA;
     end;
 
     // Preparazione delle statistiche per il grafico
